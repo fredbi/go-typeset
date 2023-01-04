@@ -1,0 +1,10 @@
+memprof
+memprof/*
+cpuprof
+cpuprof/*
+mempatprof
+mempatprof/*
+cpupatprof
+cpupatprof/*
+memsplitprof
+memsplitprof/*

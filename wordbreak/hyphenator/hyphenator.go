@@ -1,21 +1,17 @@
 package hyphenator
 
 import (
-	"sync"
 	"unicode"
 
+	iface "github.com/fredbi/go-typeset/wordbreak"
 	"golang.org/x/text/runes"
 )
 
 var (
-	mx sync.Mutex
-
-	// A cache for dictionaries. Users of this package only pay the cost
-	// of building the trie once for a given language.
-	loadedPatterns map[string]*Dictionary
-
 	// hyphens is the set of unicode runes in range Hyphen
 	hyphens = runes.In(unicode.Hyphen)
+
+	_ iface.WordBreaker = &Hyphenator{}
 )
 
 // Hyphenator knows how to break words at legit hyphenation points.
@@ -35,43 +31,34 @@ func New(opts ...Option) *Hyphenator {
 	return h
 }
 
-// load a preloaded trie Dictionary for some language patterns file.
-func loadDictFromCache(patterns string) *Dictionary {
-	mx.Lock()
-	defer mx.Unlock()
-
-	if loadedPatterns == nil {
-		loadedPatterns = make(map[string]*Dictionary)
-	}
-
-	dict, ok := loadedPatterns[patterns]
-	if !ok {
-		dict, _ = LoadPatterns(patterns)
-	}
-
-	loadedPatterns[patterns] = dict
-
-	return dict
+// BreakWordString does the same as BreakWord but takes a string as input.
+func (h *Hyphenator) BreakWordString(word string) [][]rune {
+	return h.BreakWord([]rune(word))
 }
 
 // BreakWord breaks a word in parts which represent legitimate hyphenation points.
-func (h *Hyphenator) BreakWord(word string) []string {
-	if containsHyphen(word) {
-		return []string{word} // TODO???
+func (h *Hyphenator) BreakWord(word []rune) [][]rune {
+	wordLength := len(word)
+
+	if containsHyphen(word) || wordLength < h.minLength {
+		return [][]rune{word} // words with hyphens already set are not broken down // TODO
 	}
 
 	breakPoints, found := h.isException(word)
 	if found {
 		// known hyphenation rule exception
-		return splitAtPositions(word, breakPoints)
+		return h.splitAtPositions(word, wordLength, breakPoints)
 	}
 
-	result := make([]string, 0, 4)
-	var positions = make([]int, 10) // the resulting hyphenation positions
-	dottedWord := "." + word + "."
-	for i := 0; i < len(dottedWord); i++ { // "word", "ord", "rd", "d"
-		allBreakPoints, ok := h.isPattern(dottedWord[i:])
-		if ok {
+	// allocate buffers once for all iterations
+	hasPatterns := false
+	allBreakPoints := make([][]int, 0, wordLength+2)
+	positions := make([]int, 30) // the resulting hyphenation positions. A reasonable size is preallocated.
+	fragmentBuffer := make([]rune, 0, wordLength+2)
+
+	for i := 0; i < wordLength; i++ { // ".word.", "ord.", "rd.", "d."
+		allBreakPoints, hasPatterns = h.isPattern(i, word, fragmentBuffer, allBreakPoints)
+		if hasPatterns {
 			positions = mergeBreakPoints(positions, allBreakPoints, i)
 		}
 	}
@@ -79,19 +66,18 @@ func (h *Hyphenator) BreakWord(word string) []string {
 	positions = positions[1 : len(positions)-1]
 
 	// ensure provided positions are consistent
+	// ex: [0 1 2 0 0 0 3 0 0 1]
 	switch {
 	case positions[0] > 0: // sometimes hyphen before first letter is "allowed"
 		positions[0] = 0
-	case len(positions) > len(word) && positions[len(word)] > 0:
-		positions[len(word)] = 0 // sometimes hyphen after last letter is "allowed"
+	case len(positions) > wordLength && positions[wordLength] > 0:
+		positions[wordLength] = 0 // sometimes hyphen after last letter is "allowed"
 	}
 
-	result = append(result, splitAtPositions(word, positions)...)
-
-	return result
+	return h.splitAtPositions(word, wordLength, positions)
 }
 
-func (h *Hyphenator) isException(word string) ([]int, bool) {
+func (h *Hyphenator) isException(word []rune) ([]int, bool) {
 	val := h.exceptions.Get(word)
 	if val != nil {
 		return val.([]int), true
@@ -100,16 +86,38 @@ func (h *Hyphenator) isException(word string) ([]int, bool) {
 	return nil, false
 }
 
-func (h *Hyphenator) isPattern(fragment string) ([][]int, bool) {
-	var result [][]int
+func (h *Hyphenator) isPattern(index int, word []rune, fragment []rune, result [][]int) ([][]int, bool) {
+	// ".word." => ".w", ".wo", ".wor", ".word", ".word." ("." is skipped)
+	// "word."  => "w", "wo", "wor", "word", "word."
+	const dot = '.'
 
-	for j := 1; j < len(fragment); j++ {
-		val := h.patterns.Get(fragment[:j])
+	// reset buffers, keep allocated memory
+	var start int
+	result = result[:0:cap(result)]
+	fragment = fragment[:0:cap(fragment)]
+	if index == 0 {
+		fragment = append(fragment, dot)
+		start = 0
+	} else {
+		start = index - 1
+	}
+
+	for i := start; i < len(word); i++ {
+		r := unicode.ToLower(word[i])
+		fragment = append(fragment, r)
+		val := h.patterns.Get(fragment)
 		if val == nil {
 			continue
 		}
-		positions := val.([]int)
 
+		positions := val.([]int)
+		result = append(result, positions)
+	}
+
+	fragment = append(fragment, dot)
+	val := h.patterns.Get(fragment)
+	if val != nil {
+		positions := val.([]int)
 		result = append(result, positions)
 	}
 
@@ -131,6 +139,7 @@ func mergeBreakPoints(positions []int, partialPositions [][]int, at int) []int {
 	for _, partialPosition := range partialPositions {
 		for relativeAt, num := range partialPosition { // for every relative position
 			if missing := at + relativeAt - len(positions) + 1; missing > 0 {
+				// grow positions
 				for i := 0; i < missing; i++ {
 					positions = append(positions, 0)
 				}
@@ -145,9 +154,9 @@ func mergeBreakPoints(positions []int, partialPositions [][]int, at int) []int {
 	return positions
 }
 
-// split a string at given positions
-func splitAtPositions(word string, positions []int) []string {
-	parts := make([]string, 0, len(positions))
+// split a string at given positions: this applies the mask provided by positions to the cut the word.
+func (h *Hyphenator) splitAtPositions(wordAsRunes []rune, length int, positions []int) [][]rune {
+	parts := make([][]rune, 0, len(positions))
 	previous := 0
 
 	for i, pos := range positions {
@@ -155,17 +164,20 @@ func splitAtPositions(word string, positions []int) []string {
 		if pos == 0 || pos%2 == 0 {
 			continue
 		}
+		if i-previous < h.minLeft || length-i < h.minRight {
+			continue
+		}
 
-		parts = append(parts, word[previous:i])
+		parts = append(parts, wordAsRunes[previous:i])
 		previous = i
 	}
 
-	parts = append(parts, word[previous:])
+	parts = append(parts, wordAsRunes[previous:])
 
 	return parts
 }
 
-func containsHyphen(word string) bool {
+func containsHyphen(word []rune) bool {
 	for _, r := range word {
 		if hyphens.Contains(r) {
 			return true
@@ -173,4 +185,38 @@ func containsHyphen(word string) bool {
 	}
 
 	return false
+}
+
+func IsHyphen(word []rune) bool {
+	if len(word) != 1 {
+		return false
+	}
+
+	return hyphens.Contains(word[0])
+}
+
+// SplitWord returns the parts of a word that are separated by an hyphen.
+//
+// Hyphens are isolated as individual parts.
+//
+// Example: "often-times" is transformed into ["often", "-", "times"].
+func SplitWord(word []rune) [][]rune {
+	result := make([][]rune, 0, len(word)+4)
+	var previous int
+
+	for i, r := range word {
+		if hyphens.Contains(r) {
+			if i > 0 && previous < len(word) && previous < i {
+				result = append(result, word[previous:i])
+			}
+			result = append(result, []rune{r})
+			previous = i + 1
+		}
+	}
+
+	if previous < len(word) {
+		result = append(result, word[previous:])
+	}
+
+	return result
 }

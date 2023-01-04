@@ -5,11 +5,10 @@ import (
 	"fmt"
 	"path"
 	"sort"
-	"strconv"
 	"strings"
 	"unicode"
 
-	"github.com/dghubble/trie"
+	"github.com/fredbi/go-typeset/wordbreak/hyphenator/internal/trie"
 )
 
 const (
@@ -136,17 +135,42 @@ func LoadPatterns(patternfile string) (*Dictionary, error) {
 	return dict, nil
 }
 
+func atoiRune(r rune) int {
+	switch r {
+	case '0':
+		return 0
+	case '1':
+		return 1
+	case '2':
+		return 2
+	case '3':
+		return 3
+	case '4':
+		return 4
+	case '5':
+		return 5
+	case '6':
+		return 6
+	case '7':
+		return 7
+	case '8':
+		return 8
+	case '9':
+		return 9
+	default:
+		return 0
+	}
+}
+
 // readPattern reads a pattern in the patterns section.
-func (dict *Dictionary) readPattern(line string) (string, []int) {
-	var (
-		pattern   strings.Builder // will become the pattern without positions
-		positions []int           // we'll extract positions
-		wasdigit  bool            // has the last char been a digit?
-	)
+func (dict *Dictionary) readPattern(line string) ([]rune, []int) {
+	wasdigit := false                     // has the last char been a digit?
+	pattern := make([]rune, 0, len(line)) // will become the pattern without positions
+	positions := make([]int, 0, 10)       // we'll extract positions
 
 	for _, char := range line { // iterate over the runes for this pattern
 		if unicode.IsDigit(char) {
-			d, _ := strconv.Atoi(string(char))
+			d := atoiRune(char)
 			positions = append(positions, d) // add to positions array
 			wasdigit = true
 
@@ -154,7 +178,7 @@ func (dict *Dictionary) readPattern(line string) (string, []int) {
 		}
 
 		// '.' or alphabetic rune
-		pattern.WriteRune(char)
+		pattern = append(pattern, unicode.ToLower(char))
 		if wasdigit {
 			wasdigit = false
 		} else {
@@ -162,7 +186,7 @@ func (dict *Dictionary) readPattern(line string) (string, []int) {
 		}
 	}
 
-	return pattern.String(), positions
+	return pattern, positions
 }
 
 // readExceptions processes a line from the exceptions section in a pattern file
@@ -172,10 +196,12 @@ func (dict *Dictionary) readPattern(line string) (string, []int) {
 //
 //	ex-cep-tion
 //	ta-ble
-func (dict *Dictionary) readException(line string) (word string, positions []int) {
+func (dict *Dictionary) readException(line string) ([]rune, []int) {
 	if isTeXComment(line) {
-		return
+		return nil, nil
 	}
+
+	positions := make([]int, 0, 5)
 
 	var washyphen bool
 	for _, char := range line {
@@ -189,9 +215,9 @@ func (dict *Dictionary) readException(line string) (word string, positions []int
 			positions = append(positions, 0)
 		}
 	}
-	word = strings.ReplaceAll(line, "-", "")
+	word := strings.ToLower(strings.ReplaceAll(line, "-", ""))
 
-	return
+	return []rune(word), positions
 }
 
 // String returns the identifier of the pattern file (by default, this is the file name).

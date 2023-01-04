@@ -9,8 +9,10 @@ type (
 	Option func(*options)
 
 	options struct {
-		lang language.Tag
-		// minRunesBeforeHyphen int
+		lang      language.Tag
+		minLength int
+		minLeft   int
+		minRight  int
 	}
 )
 
@@ -36,10 +38,30 @@ func WithLanguage(lang string) Option {
 	}
 }
 
+func WithMinLength(minLength int) Option {
+	return func(o *options) {
+		o.minLength = minLength
+	}
+}
+
+func WithMinLeft(minLeft int) Option {
+	return func(o *options) {
+		o.minLeft = minLeft
+	}
+}
+
+func WithMinRight(minRight int) Option {
+	return func(o *options) {
+		o.minRight = minRight
+	}
+}
+
 func defaultOptions(opts []Option) *options {
 	o := &options{
-		lang: language.AmericanEnglish,
-		// minRunesBeforeHyphen: 3,
+		lang:      language.AmericanEnglish,
+		minLength: 4,
+		minLeft:   2,
+		minRight:  2,
 	}
 
 	for _, apply := range opts {
