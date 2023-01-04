@@ -11,7 +11,10 @@ import (
 const superLongWord = `Honorificabilitudinitatibus`
 
 func TestHyphenator(t *testing.T) {
+	t.Parallel()
+
 	t.Run("should use en-US rules by default", func(t *testing.T) {
+		t.Parallel()
 		h := New()
 
 		require.Equal(t, toRunes([]string{"an", "cil", "lary"}), h.BreakWordString("ancillary"))
@@ -27,6 +30,7 @@ func TestHyphenator(t *testing.T) {
 	})
 
 	t.Run("should abide by min length rules", func(t *testing.T) {
+		t.Parallel()
 		h := New()
 
 		require.Equal(t, toRunes([]string{"ex", "am", "ple"}), h.BreakWordString("example"))
@@ -36,12 +40,14 @@ func TestHyphenator(t *testing.T) {
 	})
 
 	t.Run("pattern search should not be case sensitive", func(t *testing.T) {
+		t.Parallel()
 		h := New()
 
 		require.Equal(t, toRunes([]string{"Ex", "am", "ple"}), h.BreakWordString("Example"))
 	})
 
 	t.Run("should use fr rules on option", func(t *testing.T) {
+		t.Parallel()
 		h := New(WithLanguage("fr"))
 
 		require.Equal(t, "patterns: hyph-fr.tex", h.String())
@@ -49,6 +55,7 @@ func TestHyphenator(t *testing.T) {
 	})
 
 	t.Run("should use de rules on option", func(t *testing.T) {
+		t.Parallel()
 		h := New(WithLanguageTag(language.German))
 
 		require.Equal(t, "German Hyphenation Patterns (Reformed Orthography, 2006) `dehyphn-x' 2019-04-04 (WL)}", h.String())
@@ -58,30 +65,35 @@ func TestHyphenator(t *testing.T) {
 	})
 
 	t.Run("should use es rules on option", func(t *testing.T) {
+		t.Parallel()
 		h := New(WithLanguageTag(language.Spanish))
 
 		require.Equal(t, toRunes([]string{"trans", "la", "to", "res"}), h.BreakWordString("translatores"))
 	})
 
 	t.Run("should use en-GB rules on option", func(t *testing.T) {
+		t.Parallel()
 		h := New(WithLanguageTag(language.BritishEnglish))
 
 		require.Equal(t, toRunes([]string{"uni", "ver", "sit", "ies"}), h.BreakWordString("universities"))
 	})
 
 	t.Run("should fallback to some supported language", func(t *testing.T) {
+		t.Parallel()
 		h := New(WithLanguageTag(language.Ukrainian))
 
 		require.Equal(t, "patterns: ushyphmax.tex", h.String())
 	})
 
 	t.Run("should break super long word", func(t *testing.T) {
+		t.Parallel()
 		h := New()
 
 		require.Equal(t, toRunes([]string{"Hon", "ori", "fi", "ca", "bil", "itu", "dini", "tat", "ibus"}), h.BreakWordString(superLongWord))
 	})
 
 	t.Run("should not hyphen on shorter alternatives", func(t *testing.T) {
+		t.Parallel()
 		h := New(WithMinLength(6), WithMinLeft(6), WithMinRight(2))
 
 		res := h.BreakWordString(superLongWord)
@@ -91,6 +103,7 @@ func TestHyphenator(t *testing.T) {
 	})
 
 	t.Run("should not hyphen shorter words", func(t *testing.T) {
+		t.Parallel()
 		h := New(WithMinLength(7), WithMinLeft(6), WithMinRight(2))
 
 		res := h.BreakWordString("example")
@@ -100,6 +113,7 @@ func TestHyphenator(t *testing.T) {
 	})
 
 	t.Run("should hyphen unknown words (and successfully extend positions)", func(t *testing.T) {
+		t.Parallel()
 		h := New()
 
 		res := h.BreakWordString(strings.Repeat(superLongWord, 2))
@@ -113,6 +127,8 @@ func TestHyphenator(t *testing.T) {
 }
 
 func TestSplitWord(t *testing.T) {
+	t.Parallel()
+
 	t.Run("should split according to hyphens", func(t *testing.T) {
 		require.Equal(t, toRunes([]string{"XY"}), SplitWord([]rune("XY")))
 		require.Equal(t, toRunes([]string{"X", "-", "Y"}), SplitWord([]rune("X-Y")))
@@ -125,6 +141,8 @@ func TestSplitWord(t *testing.T) {
 }
 
 func TestIsHyphen(t *testing.T) {
+	t.Parallel()
+
 	require.True(t, IsHyphen([]rune("-")))
 	require.False(t, IsHyphen([]rune("_")))
 	require.False(t, IsHyphen([]rune("foo")))

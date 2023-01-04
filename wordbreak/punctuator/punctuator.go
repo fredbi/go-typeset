@@ -3,27 +3,35 @@ package punctuator
 import (
 	"unicode"
 
-	"golang.org/x/text/runes"
+	iface "github.com/fredbi/go-typeset/wordbreak"
 )
 
-// punctuations is the set of unicode runes in range Punct
-var hyphens = runes.In(unicode.Hyphen)
+var (
+	_ iface.WordBreaker = &Punctuator{}
+)
 
+// Punctuator knows how to break words on punctuation runes.
 type Punctuator struct {
 }
 
+// New word breaker across punctuation marks.
 func New() *Punctuator {
 	return &Punctuator{}
 }
 
+// BreakWordString is like BreakWord but takes a string as input.
+func (p *Punctuator) BreakWordString(word string) [][]rune {
+	return p.BreakWord([]rune(word))
+}
+
 // BreakWord breaks words along punctuation separators such as ",", ".", ":", ";", "?", "!", "&"...
+//
+// Punctuation runes are retained as single character parts.
 //
 // It conforms to the unicode Punctuation class, with the addition of the "|" (pipe).
 //
-// Example:
-//
-//	"a;b,c.d:e_f\g-" => ["a/", "b/", "c|", "d-", "e_", "f\", "g-"]
-func (p *Punctuator) BreakWord(word string) []string {
+//	"a;b,c.d:e_f\g-" => ["a", ";", "b", ",", "c", ".", "d", ":", "e", "_", "f", "\", "g" ,"-"]
+func (p *Punctuator) BreakWord(word []rune) [][]rune {
 	return breakAtFunc(word, punctSplitFunc)
 }
 
@@ -32,26 +40,31 @@ func punctSplitFunc(r rune) bool {
 }
 
 // breakAtFunc works like strings.FieldsFunc, but retains separators.
-//
-// Break always happens _after_ the separator.
-func breakAtFunc(word string, isBreak func(rune) bool) []string {
-	parts := make([]string, 0, len(word))
-	previous := 0
+func breakAtFunc(word []rune, isBreak func(rune) bool) [][]rune {
+	result := make([][]rune, 0, len(word)+4)
+	var previous int
 
 	for i, r := range word {
-		if !isBreak(r) {
-			continue
+		if isBreak(r) {
+			if i > 0 && previous < len(word) && previous < i {
+				result = append(result, word[previous:i])
+			}
+			result = append(result, []rune{r})
+			previous = i + 1
 		}
-
-		parts = append(parts, word[previous:i+1])
-		previous = i + 1
 	}
 
 	if previous < len(word) {
-		if len(word[previous:]) > 0 {
-			parts = append(parts, word[previous:])
-		}
+		result = append(result, word[previous:])
 	}
 
-	return parts
+	return result
+}
+
+func IsPunctuation(word []rune) bool {
+	if len(word) != 1 {
+		return false
+	}
+
+	return punctSplitFunc(word[0])
 }

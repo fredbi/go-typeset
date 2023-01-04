@@ -37,6 +37,12 @@ func (h *Hyphenator) BreakWordString(word string) [][]rune {
 }
 
 // BreakWord breaks a word in parts which represent legitimate hyphenation points.
+//
+// Hyphenation marks are not rendered.
+//
+// Example (for US English):
+//
+//	"example" => ["ex", "am", "ple"]
 func (h *Hyphenator) BreakWord(word []rune) [][]rune {
 	wordLength := len(word)
 
@@ -197,9 +203,12 @@ func IsHyphen(word []rune) bool {
 
 // SplitWord returns the parts of a word that are separated by an hyphen.
 //
-// Hyphens are isolated as individual parts.
+// Hyphens are isolated as individual parts. Using SplitWord in conjunction with BreakWord
+// allows to process differently explicit hyphens from legit hyphens.
 //
-// Example: "often-times" is transformed into ["often", "-", "times"].
+// Example:
+//
+//	"often-times" is transformed into ["often", "-", "times"].
 func SplitWord(word []rune) [][]rune {
 	result := make([][]rune, 0, len(word)+4)
 	var previous int

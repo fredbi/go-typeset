@@ -7,6 +7,8 @@ import (
 )
 
 func TestSupportedPatterns(t *testing.T) {
+	t.Parallel()
+
 	supported, err := SupportedPatterns()
 	require.NoError(t, err)
 
@@ -21,6 +23,8 @@ func TestSupportedPatterns(t *testing.T) {
 }
 
 func TestLoadPatterns(t *testing.T) {
+	t.Parallel()
+
 	supported, err := SupportedPatterns()
 	require.NoError(t, err)
 

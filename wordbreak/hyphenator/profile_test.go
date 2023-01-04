@@ -1,4 +1,5 @@
 //go:build profiler
+
 package hyphenator
 
 import (
