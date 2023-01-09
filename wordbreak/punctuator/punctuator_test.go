@@ -11,9 +11,9 @@ func TestPunctuator(t *testing.T) {
 
 	s := New()
 	t.Run("should break along punctuation signs", func(t *testing.T) {
-		const word = `a/b/c|d-e_foo\g-`
+		const word = `a/b/c|d.e_foo\g&`
 		require.Equal(t, toRunes([]string{
-			"a", "/", "b", "/", "c", "|", "d", "-", "e", "_", "foo", `\`, "g", "-",
+			"a", "/", "b", "/", "c", "|", "d", ".", "e", "_", "foo", `\`, "g", "&",
 		}),
 			s.BreakWord([]rune(word)),
 		)
@@ -62,7 +62,7 @@ func TestIsBreakRune(t *testing.T) {
 	for _, r := range []rune{
 		'/',
 		'_',
-		'-',
+		'.',
 		'&',
 		'!',
 		'|',
@@ -78,6 +78,8 @@ func TestIsNotPunctuation(t *testing.T) {
 	require.False(t, IsPunctuation([]rune("aa")))
 	require.False(t, IsPunctuation([]rune(",,")))
 	require.False(t, IsPunctuation([]rune("")))
+	require.False(t, IsPunctuation([]rune("-")))
+	require.False(t, IsPunctuation([]rune{'\u00AD'}))
 }
 
 func toRunes(in []string) [][]rune {
