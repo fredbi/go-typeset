@@ -25,6 +25,13 @@ var (
 	lookupTable     []byte
 )
 
+// IsAmbiguous returns true if the unicode point for this rune
+// is considered ambiguous regarding width in East Asian character sets
+// (more context may be needed to determine the desired width).
+func IsAmbiguous(r rune) bool {
+	return inTable(r, ambiguous)
+}
+
 // initLookupTable allocates an in-memory lookup table of 278528 bytes for faster operation.
 //
 // Rune widths (<4) are packed on 2 bits.

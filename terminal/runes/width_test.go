@@ -43,10 +43,12 @@ var runewidthtests = []struct {
 	{'👁', 1, 1, 2},
 	{'ö', 1, 1, 1},
 	{'ä', 1, 1, 1},
-	{'æ', 1, 2, 2},
-	{'ø', 1, 2, 2}, // ambiguous character defaulting to wide in East-Asian character sets
-	{'Å', 1, 2, 2}, // ambiguous character defaulting to wide in East-Asian character sets
-	{'å', 1, 1, 1}, // neutral character re East-Asian, defaults to narrow
+	{'æ', 1, 2, 2},      // ambiguous character defaulting to wide in East-Asian character sets -> defaults to 2
+	{'ø', 1, 2, 2},      // ambiguous character defaulting to wide in East-Asian character sets -> defaults to 2
+	{'Å', 1, 2, 2},      // ambiguous character defaulting to wide in East-Asian character sets -> defaults to 2
+	{'å', 1, 1, 1},      // neutral character re East-Asian, defaults to narrow
+	{'⸺', 3, 3, 3},      // special super-wide code point
+	{'\u2e3b', 4, 4, 4}, // special super-wide code point
 }
 
 func TestWidth(t *testing.T) {
@@ -58,7 +60,7 @@ func TestWidth(t *testing.T) {
 				testCase := toPin
 
 				w := Width(testCase.in)
-				require.Equal(t, runeWidthNonEastAsian(testCase.in), w)
+				require.Equal(t, runeWidth(testCase.in, &options{}), w)
 				require.Equalf(t, testCase.out, w,
 					"%[1]U: RuneWidth(%[1]q) = %d, want %d (EastAsianWidth=false)",
 					testCase.in, w, testCase.out,
@@ -75,7 +77,7 @@ func TestWidth(t *testing.T) {
 				testCase := toPin
 
 				w := Width(testCase.in, WithEastAsianWidth(true))
-				require.Equal(t, runeWidthEastAsian(testCase.in, false), w)
+				require.Equal(t, runeWidth(testCase.in, &options{EastAsian: true, DefaultAsianAmbiguousWidth: 2}), w)
 				require.Equalf(t, testCase.eaout, w,
 					"%[1]U: RuneWidth(%[1]q) = %d, want %d (EastAsianWidth=true, SkipStrictEmojiNeutral=false)",
 					testCase.in, w, testCase.eaout,
@@ -91,7 +93,7 @@ func TestWidth(t *testing.T) {
 			for _, toPin := range runewidthtests {
 				testCase := toPin
 				w := Width(testCase.in, WithEastAsianWidth(true), WithSkipStrictEmojiNeutral(true))
-				require.Equal(t, runeWidthEastAsian(testCase.in, true), w)
+				require.Equal(t, runeWidth(testCase.in, &options{EastAsian: true, SkipStrictEmojiNeutral: true, DefaultAsianAmbiguousWidth: 2}), w)
 				require.Equalf(t, testCase.nseout, w,
 					"%[1]U: RuneWidth(%[1]q) = %d, want %d (EastAsianWidth=true, SkipStrictEmojiNeutral=true)",
 					testCase.in, w, testCase.nseout,
@@ -114,57 +116,9 @@ func TestWidth(t *testing.T) {
 		require.Equal(t, 4, len([]rune(grapheme)))    // rune count
 		require.NotEqual(t, 2, StringWidth(grapheme)) // should be 2 but we don't support this for now
 	})
-}
 
-func BenchmarkWidth(b *testing.B) {
-	// warm lookup cache
-	_ = Width('A')
-
-	b.ResetTimer()
-	b.ReportAllocs()
-	b.SetBytes(0)
-
-	for n := 0; n < b.N; n++ {
-		for _, testCase := range runewidthtests {
-			_ = Width(testCase.in)
-		}
-	}
-}
-
-func BenchmarkWidths(b *testing.B) {
-	// warm lookup cache
-	_ = Width('A')
-	str := []rune("string")
-
-	b.ResetTimer()
-	b.ReportAllocs()
-	b.SetBytes(0)
-
-	for n := 0; n < b.N; n++ {
-		_ = Widths(str)
-	}
-}
-
-func BenchmarkStringWidth(b *testing.B) {
-	// warm lookup cache
-	_ = Width('A')
-	const str = "string"
-
-	b.ResetTimer()
-	b.ReportAllocs()
-	b.SetBytes(0)
-
-	for n := 0; n < b.N; n++ {
-		_ = StringWidth(str)
-	}
-}
-
-func TestAmbiguous(t *testing.T) {
-	t.SkipNow()
-
-	for _, runeRange := range ambiguous {
-		for i := runeRange.first; i <= runeRange.last; i++ {
-			t.Logf("%[1]U: %[1]c", i)
-		}
-	}
+	t.Run("should be able to customize default width for ambiguous code points", func(t *testing.T) {
+		require.Equal(t, 2, Width('Å', WithEastAsianWidth(true), WithAsianAmbiguousWidth(2)))
+		require.Equal(t, 1, Width('Å', WithEastAsianWidth(true), WithAsianAmbiguousWidth(1)))
+	})
 }

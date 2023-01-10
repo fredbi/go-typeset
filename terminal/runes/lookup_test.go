@@ -1,13 +1,14 @@
 package runes
 
-import "testing"
+import (
+	"testing"
 
-func BenchmarkBuildLookup(b *testing.B) {
-	b.ResetTimer()
-	b.ReportAllocs()
-	b.SetBytes(0)
+	"github.com/stretchr/testify/require"
+)
 
-	for n := 0; n < b.N; n++ {
-		_ = buildLookupTable(optionsWithDefaults(nil))
-	}
+func TestIsAmbiguous(t *testing.T) {
+	require.True(t, IsAmbiguous('ø'))
+	require.True(t, IsAmbiguous('Å'))
+	require.True(t, IsAmbiguous('æ'))
+	require.False(t, IsAmbiguous('å'))
 }

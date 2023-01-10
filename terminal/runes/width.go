@@ -2,7 +2,9 @@
 
 package runes
 
-import "unicode/utf8"
+import (
+	"unicode/utf8"
+)
 
 // Width returns the number of cells in a single rune.
 //
@@ -15,9 +17,13 @@ func Width(r rune, opts ...Option) int {
 	if !utf8.ValidRune(r) || r == utf8.RuneError {
 		return 0
 	}
+	if r == 0x2E3B {
+		// special case with code point with a width that overflow our lookup table
+		return 4
+	}
 
 	o := optionsWithDefaults(opts)
-	if o.EastAsian || o.SkipStrictEmojiNeutral {
+	if o.EastAsian {
 		return runeWidth(r, o)
 	}
 
@@ -47,25 +53,19 @@ func StringWidth(s string, opts ...Option) (width int) {
 }
 
 func runeWidth(r rune, opts *options) int {
-	if !utf8.ValidRune(r) || r == utf8.RuneError {
-		return 0
-	}
-
-	if opts.EastAsian {
-		return runeWidthEastAsian(r, opts.SkipStrictEmojiNeutral)
-	}
-
-	return runeWidthNonEastAsian(r)
-}
-
-func runeWidthNonEastAsian(r rune) int {
 	switch {
+	case !utf8.ValidRune(r) || r == utf8.RuneError:
+		return 0
 	case r < 0x20:
 		return 0
 	case (r >= 0x7F && r <= 0x9F) || r == 0xAD: // non-printable
 		return 0
-	case r < 0x300:
+	case r < 0x300 && !opts.EastAsian: // those code points are mostly ambiguous in EastAsian mode
 		return 1
+	case r == 0x2E3B: // THREE-EM-DASH
+		return 4
+	case r == 0x2E3A: // TWO-EM DASH
+		return 3
 	case inTables(r, nonprint, combining):
 		return 0
 	case inTable(r, narrow):
@@ -73,22 +73,19 @@ func runeWidthNonEastAsian(r rune) int {
 	case inTable(r, doublewidth):
 		return 2
 	default:
-		return 1
-	}
-}
+		if !opts.EastAsian {
+			return 1
+		}
 
-func runeWidthEastAsian(r rune, skipStrictEmojiNeutral bool) int {
-	switch {
-	case inTables(r, nonprint, combining):
-		return 0
-	case inTable(r, narrow):
-		return 1
-	case inTables(r, ambiguous, doublewidth):
-		return 2
-	case skipStrictEmojiNeutral && inTables(r, ambiguous, emoji, narrow):
-		// TODO: case skipStrictEmojiNeutral && inTables(r, emoji, narrow):
-		return 2
-	default:
+		// East-Asian behavior
+		if inTables(r, ambiguous) {
+			return opts.DefaultAsianAmbiguousWidth
+		}
+
+		if opts.SkipStrictEmojiNeutral && inTables(r, emoji, narrow) {
+			return 2
+		}
+
 		return 1
 	}
 }

@@ -116,3 +116,70 @@ func TestSliceReader(t *testing.T) {
 		require.Error(t, err)
 	})
 }
+
+func TestSlicing(t *testing.T) {
+	const str = "unixöperatingsystem"
+
+	t.Run("should slice the collection of runes with byte offsets", func(t *testing.T) {
+		r := NewSliceReader([]rune(str))
+		slices := r.SliceFromByteOffsets([]int{1, 4})
+		expected := []string{"nix"}
+		require.Equal(t, expected, toStrings(slices))
+
+		slices = r.SliceFromByteOffsets([]int{4, 8, 10, 12})
+		expected = []string{"öpe", "ti"}
+		require.Equal(t, expected, toStrings(slices))
+	})
+
+	t.Run("should slice the collection of runes with rune offsets", func(t *testing.T) {
+		r := NewSliceReader([]rune(str))
+		slices := r.Slices([]int{1, 4})
+		expected := []string{"nix"}
+		require.Equal(t, expected, toStrings(slices))
+
+		slices = r.Slices([]int{4, 8, 10, 12})
+		expected = []string{"öper", "in"}
+		require.Equal(t, expected, toStrings(slices))
+	})
+
+	t.Run("should slice the collection of runes with single rune offset", func(t *testing.T) {
+		r := NewSliceReader([]rune(str))
+		slice := r.Slice(1, 4)
+		expected := "nix"
+		require.Equal(t, expected, string(slice))
+
+		slice = r.Slice(4, 8)
+		expected = "öper"
+		require.Equal(t, expected, string(slice))
+	})
+
+	t.Run("should panic if offsets are not pairs", func(t *testing.T) {
+		r := NewSliceReader([]rune(str))
+
+		require.Panics(t, func() {
+			_ = r.SliceFromByteOffsets([]int{4, 10, 12}) //nolint:staticcheck
+		})
+
+		require.Panics(t, func() {
+			_ = r.Slices([]int{4, 8, 10}) //nolint:staticcheck
+		})
+	})
+
+	t.Run("should keep track of unread runes so far", func(t *testing.T) {
+		r := NewSliceReader([]rune(str))
+		for i := 0; i < 5; i++ {
+			_, _, _ = r.ReadRune()
+		}
+		require.Equal(t, "peratingsystem", string(r.Runes()))
+	})
+}
+
+func toStrings(in [][]rune) []string {
+	out := make([]string, 0, len(in))
+
+	for _, s := range in {
+		out = append(out, string(s))
+	}
+
+	return out
+}

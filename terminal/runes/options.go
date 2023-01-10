@@ -5,15 +5,17 @@ type (
 	Option func(*options)
 
 	options struct {
-		EastAsian              bool
-		SkipStrictEmojiNeutral bool
+		EastAsian                  bool
+		SkipStrictEmojiNeutral     bool
+		DefaultAsianAmbiguousWidth int
 	}
 )
 
 var (
 	defaultOptions = &options{
-		EastAsian:              false,
-		SkipStrictEmojiNeutral: false,
+		EastAsian:                  false,
+		SkipStrictEmojiNeutral:     false,
+		DefaultAsianAmbiguousWidth: 2,
 	}
 )
 
@@ -30,10 +32,25 @@ func WithEastAsianWidth(enabled bool) Option {
 	}
 }
 
-// WithSkipStrictEmojiNeutral should be set to true for some broken East-Asian fonts
+// WithSkipStrictEmojiNeutral should be set to true for some broken East-Asian fonts.
+//
+// This option only takes effect when EastAsianWidth is enabled.
 func WithSkipStrictEmojiNeutral(enabled bool) Option {
 	return func(o *options) {
 		o.SkipStrictEmojiNeutral = enabled
+	}
+}
+
+// WithAsianAmbiousWidth sets the default width to apply in EastAsian mode
+// for ambiguous runes, i.e. non-EastAsian characters that already have a code point
+// in an East-Asian character set.
+//
+// This option only takes effect when EastAsianWidth is enabled.
+//
+// The default is to apply 2 cells for those characters.
+func WithAsianAmbiguousWidth(width int) Option {
+	return func(o *options) {
+		o.DefaultAsianAmbiguousWidth = width
 	}
 }
 
