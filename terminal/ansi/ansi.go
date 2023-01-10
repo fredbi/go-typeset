@@ -65,8 +65,11 @@ func StripANSIFromRunes(rns []rune) ([]rune, []rune, []rune, []rune) {
 // decodeANSISequence identifies an ANSI terminal escape sequence.
 //
 // The escape sequence detected follows a Control Sequence Introducer: ESC[.
+//
+// NOTE: this implementation supersedes the previous regexp-based one and perfors about 10x faster,
+// with no allocation and minimal processing. Further, we may now recognize more complex patterns for escape sequences,
 func decodeANSISequence(rdr *runes.SliceReader) []rune {
-	const maxDigits = 2
+	const maxDigits = 3
 
 	var (
 		requiredMatch bool
@@ -88,6 +91,7 @@ func decodeANSISequence(rdr *runes.SliceReader) []rune {
 		}
 	}()
 
+	// require escape sequence start
 	r, _, err := rdr.ReadRune()
 	if err != nil {
 		return nil
@@ -106,18 +110,9 @@ func decodeANSISequence(rdr *runes.SliceReader) []rune {
 	}
 	runeCount++
 
-	r, _, err = rdr.ReadRune()
-	if err != nil {
-		return nil
-	}
-	if !unicode.IsDigit(r) { // TODO: standard sayz is optional, as in ESC[m
-		return nil
-	}
-
 	// required pattern found
 	// Now matches the optional parts of the pattern
 	requiredMatch = true
-	runeCount++
 	nextStart, _ = rdr.Seek(0, io.SeekCurrent)
 
 	for i := 0; i < maxDigits; i++ {
@@ -134,20 +129,7 @@ func decodeANSISequence(rdr *runes.SliceReader) []rune {
 		nextStart++
 	}
 
-	if r == ';' || r == ':' { // TODO: can have more that 2 sections, as in ESC[38,5;(n)m (256 bit color) or ESC[38;2;(r);(g);(b)m (Gnome term, kconsole)
-		// TODO: ';' may be ':' in some case???
-		runeCount++
-		nextStart++
-
-		r, _, err = rdr.ReadRune()
-		if err != nil {
-			return rdr.Slice(int(current), int(current)+runeCount)
-		}
-
-		if !unicode.IsDigit(r) { // TODO: is optional
-			return rdr.Slice(int(current), int(current)+runeCount)
-		}
-
+	for r == ';' || r == ':' { // can have more that 2 sections, as in ESC[38,5;(n)m (256 bit color) or ESC[38;2;(r);(g);(b)m (Gnome term, kconsole)
 		runeCount++
 		nextStart++
 
@@ -174,9 +156,7 @@ func decodeANSISequence(rdr *runes.SliceReader) []rune {
 }
 
 func decodeString(rdr *runes.SliceReader) []rune {
-	var (
-		runeCount int
-	)
+	var runeCount int
 
 	current, _ := rdr.Seek(0, io.SeekCurrent)
 
@@ -186,11 +166,10 @@ func decodeString(rdr *runes.SliceReader) []rune {
 			break
 		}
 
-		if r == esc {
-			start := current
-			current, _ = rdr.Seek(-1, io.SeekCurrent)
+		if r == esc { // start of another escape sequence: end of stripped string
+			_, _ = rdr.Seek(-1, io.SeekCurrent)
 
-			return rdr.Slice(int(start), int(start)+runeCount)
+			return rdr.Slice(int(current), int(current)+runeCount)
 		}
 
 		runeCount++

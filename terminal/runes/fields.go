@@ -22,7 +22,7 @@ func FieldsFunc(in []rune, splitFunc func(rune) bool) [][]rune {
 
 	if start >= 0 {
 		// last token
-		tokens = append(tokens, in[start:len(in)])
+		tokens = append(tokens, in[start:])
 	}
 
 	return tokens[:len(tokens):len(tokens)]

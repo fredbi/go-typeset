@@ -134,13 +134,30 @@ func TestStripANSI(t *testing.T) {
 	})
 }
 
-/* TODO: test other sequences (test scanner)
+// test a variety of legit ANSI sequences (test scanner)
 func TestDecodeANSISequence(t *testing.T) {
-	// var input = []rune(startInput + startInput + wordInput + endInput + endInput + startInput + endInput)
-	var input = []rune(startInput + wordInput + endInput)
-	stripped, start, end, _ := StripANSIFromRunes(input)
-	t.Logf("DEBUG: %q, %q, %q", string(stripped), string(start), string(end))
-	//func StripANSIFromRunes2(rns []rune) ([]rune, []rune, []rune) {
+	t.Run("strip ANSI recognize sequences with default numerical argument", func(t *testing.T) {
+		stripped, start, end, remainder := StripANSIFromRunes([]rune("\033[mABC\033[1;2~"))
+		require.Equal(t, "ABC", string(stripped))
+		require.Equal(t, "\x1b[m", string(start))
+		require.Equal(t, "\x1b[1;2~", string(end))
+		require.Empty(t, remainder)
+	})
+
+	t.Run("strip ANSI recognize sequences with ':' as an arguments separator", func(t *testing.T) {
+		stripped, start, end, remainder := StripANSIFromRunes([]rune("\033[1:2mABC\033[1:2;;~"))
+		require.Equal(t, "ABC", string(stripped))
+		require.Equal(t, "\x1b[1:2m", string(start))
+		require.Equal(t, "\x1b[1:2;;~", string(end))
+		require.Empty(t, remainder)
+	})
+
+	t.Run("strip ANSI recognize sequences with more than 2 numerical arguments", func(t *testing.T) {
+		stripped, start, end, remainder := StripANSIFromRunes([]rune("\033[1;2;3;4mABC\033[1:2:3:4~"))
+		require.Equal(t, "ABC", string(stripped))
+		require.Equal(t, "\x1b[1;2;3;4m", string(start))
+		require.Equal(t, "\x1b[1:2:3:4~", string(end))
+		require.Empty(t, remainder)
+	})
 
 }
-*/
