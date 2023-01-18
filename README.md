@@ -2,13 +2,17 @@
 
 Typesetting utilities for golang.
 
+## Project Status
+The project is currently a WIP. ETA for a stabilized API: Feb. 2023
+
+
 ## Word breakers
 
 * hyphenator: breaks a word across legit hyphenation breakpoints. Implements the classical algorithm from Frank M. Liang, with support for TeX hyphenation rule files.
 * punctuator: breaks a word across punctuation marks, retaining separators
 * tokenizer: breaks a text into space-separated tokens
 
-### Maintenance
+### Maintening word breaker
 
 * hyphenator
 
@@ -44,6 +48,10 @@ Utilities to work with runes on a terminal.
 > Perhaps in the future we may reintroduce a fasrer, allocation-free version of `github.com/rivo/uniseg` and iterate over unicode
 > graphemes rather than runes.
 
+* line breaker: future musings could be to extend the rendering to support PDF/HTML output, with font width measuring etc. Wow!
+
+## Rendering attributes
+
 ## Performances
 
 Most of the exposed utilities provide interfaces to work with slice of runes instead of strings.
@@ -54,6 +62,11 @@ Most of the exposed utilities provide interfaces to work with slice of runes ins
 
 I've added a few tests that collect memory and/or CPU profiles. Their output may be use to profile the desired functions
 and find more optimizations.
+
+## Limitations
+
+* Fonts: at this moment, rendering utilities exposed by this package only support fixed-width terminal output.
+* Runes: at this moment, rune width calculation does not support unicode grapheme clusters
 
 ## Credits and licenses
 

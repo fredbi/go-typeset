@@ -1,4 +1,4 @@
-package runes
+package runesio
 
 import (
 	"io"
@@ -27,7 +27,7 @@ func TestSliceReader(t *testing.T) {
 			res = append(res, rn)
 			i++
 
-			require.Equal(t, Width(rn), size)
+			require.Equal(t, 1, size)
 		}
 
 		require.Equal(t, len(str), i)

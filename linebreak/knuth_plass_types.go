@@ -1,12 +1,18 @@
 package linebreak
 
+import (
+	"github.com/fredbi/go-typeset/attributes"
+	"github.com/fredbi/go-typeset/terminal/ansi"
+	"github.com/fredbi/go-typeset/terminal/runes/runesio"
+)
+
 type (
 	nodeT struct {
-		nodeType   nodeType
-		penalty    float64
-		flagged    bool
-		value      string
-		attributes []string // attributes such as color, italic, bold ...
+		nodeType  nodeType
+		penalty   float64
+		flagged   bool
+		value     []rune
+		attribute attributes.Renderer // attributes such as color, italic, bold ...
 
 		sums
 	}
@@ -45,6 +51,14 @@ type (
 	fitnessClass int
 
 	err string
+
+	tokenState struct {
+		list            *attributes.State
+		currentRenderer attributes.Renderer
+		isStarted       bool
+		isStopped       bool
+		stripped        ansi.StrippedToken
+	}
 )
 
 const (
@@ -81,6 +95,7 @@ func newBreakPoint(position int, demerits float64, ratio float64, line int, fitn
 	}
 }
 
+//nolint:unparam
 func newGlue(width, stretch, shrink float64) nodeT {
 	return nodeT{
 		nodeType: nodeTypeGlue,
@@ -92,13 +107,14 @@ func newGlue(width, stretch, shrink float64) nodeT {
 	}
 }
 
-func newBox(width float64, value string) nodeT {
+func newBox(width float64, value []rune, attribute attributes.Renderer) nodeT {
 	return nodeT{
 		nodeType: nodeTypeBox,
 		value:    value,
 		sums: sums{
 			width: width,
 		},
+		attribute: attribute,
 	}
 }
 
@@ -175,10 +191,80 @@ func (n nodeT) isForcedBreak() bool {
 	return n.nodeType == nodeTypePenalty && n.penalty == -infinity
 }
 
+func (n nodeT) Render(w runesio.Writer) {
+	if !n.isBox() {
+		return
+	}
+
+	if n.attribute != nil {
+		n.attribute.Render(w)
+
+		return
+	}
+
+	_, _ = w.WriteRunes(n.value)
+}
+
+func (n nodeT) HasRenderer() bool {
+	return n.attribute != nil
+}
+
 func (f fitnessClass) isAwayFrom(g fitnessClass) bool {
 	return abs(int(f)-int(g)) > 1
 }
 
+func (s *tokenState) SetStart() {
+	if s.isStarted {
+		return
+	}
+}
+
+func (s *tokenState) SetStop() {
+	if s.isStopped {
+		return
+	}
+}
+
+func (s *tokenState) Start(text []rune) {
+	// todo: embed chained line, store current renderer and work the push together
+	/*
+		if len(s.stripped.StartSequence) == 0 && len(s.stripped.StopSequence) == 0 {
+			return nil
+		}
+	*/
+
+	if !s.isStarted {
+		s.isStarted = true
+
+		s.currentRenderer = attributes.New(text, s.stripped.StartSequence, nil)
+	} else {
+		s.currentRenderer = attributes.New(text, nil, nil)
+	}
+
+	s.list.Push(s.currentRenderer)
+}
+
+func (s *tokenState) Stop() {
+	last := s.currentRenderer
+	if last == nil || len(s.stripped.StopSequence) == 0 {
+		return
+	}
+
+	last.SetStop(s.stripped.StopSequence)
+}
+
+func (s *tokenState) Current() attributes.Renderer {
+	return s.currentRenderer
+}
+
+func newTokenState(stripped ansi.StrippedToken, list *attributes.State) *tokenState {
+	return &tokenState{
+		list:     list,
+		stripped: stripped,
+	}
+}
+
+/*
 func min(a, b int) int {
 	if a < b {
 		return a
@@ -186,6 +272,7 @@ func min(a, b int) int {
 
 	return b
 }
+*/
 
 func minf(a, b float64) float64 {
 	if a < b {

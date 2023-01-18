@@ -3,232 +3,286 @@ package linebreak
 import (
 	"container/list"
 	"math"
-	"strings"
-)
-
-type (
-	// LineBreaker breaks a paragraph into lines under line width constraints.
-	//
-	// It implements the Knuth-Plass algorithm.
-	LineBreaker struct {
-		nodes       []nodeT
-		lineWidths  []float64
-		sum         *sums
-		activeNodes *list.List
-		spaceWidth  float64
-		hyphenWidth float64
-		// spaceStretch float64
-		//spaceShrink  float64
-
-		*options
-	}
 )
 
 const (
 	infinity   = 10000.00
 	maxDemerit = math.MaxFloat64
-
-	hyphen           = "-"
-	space            = " "
-	flaggedPenalty   = true
-	unflaggedPenalty = false
-	noWidth          = 0.0
-	noShrink         = 0.0
 )
 
-func New(opts ...Option) *LineBreaker {
-	l := &LineBreaker{
-		options: defaultOptions(opts),
+func (l *LineBreaker) adjustmentRatio(fromBreakPoint *breakPoint, toNode nodeT, sum *sums, idealWidth float64) float64 {
+	actualWidth := sum.width - fromBreakPoint.totals.width
+
+	if toNode.isPenalty() {
+		// for penalties with a width, e.g. extra hyphen
+		actualWidth += toNode.width
 	}
 
-	l.spaceWidth = l.scale(l.measurer(space))
-	if l.wordBreak {
-		l.hyphenWidth = l.scale(l.measurer(hyphen))
+	switch {
+	case actualWidth < idealWidth:
+		// need to stretch
+		stretch := sum.stretch - fromBreakPoint.totals.stretch
+
+		if stretch > 0 {
+			return (idealWidth - actualWidth) / stretch
+		}
+
+		return infinity
+
+	case actualWidth > idealWidth:
+		// need to shrink
+		shrink := sum.shrink - fromBreakPoint.totals.shrink
+
+		if shrink > 0 {
+			return (idealWidth - actualWidth) / shrink
+		}
+
+		return infinity
+
+	default:
+		// perfect match
+		return 0.00
+	}
+}
+
+// demeritsForRatio attributes a score to the adjustment ratio, taking penalties into account.
+func (l *LineBreaker) demeritsForRatio(node nodeT, ratio float64) float64 {
+	badness := l.demerits.line + l.badness*math.Pow(math.Abs(ratio), 3)
+	penalty := node.penalty
+
+	switch {
+	case node.isPenalty() && penalty > 0:
+		return math.Pow(badness+penalty, 2)
+	case node.isPenalty() && penalty != -infinity:
+		return math.Pow(badness, 2) - math.Pow(penalty, 2)
+	default:
+		return math.Pow(badness, 2)
+	}
+}
+
+// demeritsAndClass attributes a demerits score and fitness class from a break point to a node.
+func (l *LineBreaker) demeritsAndClass(fromBreakPoint *breakPoint, toNode nodeT, ratio float64) (float64, fitnessClass) {
+	demerits := l.demeritsForRatio(toNode, ratio)
+
+	previous := l.nodes[fromBreakPoint.position]
+	if toNode.isPenalty() && toNode.flagged && previous.isPenalty() && previous.flagged {
+		// penalize consecutive flagged penalty nodes
+		demerits += l.demerits.flagged
 	}
 
-	// NOTE: this is for center & justify (not implemented for now)
-	// l.spaceStretch = min(1, int(float64(l.spaceWidth*l.space.width)/float64(l.space.stretch)))
-	// l.spaceShrink = min(1, int(float64(l.spaceWidth*l.space.width)/float64(l.space.shrink)))
+	currentClass := newFitnessClass(ratio)
 
-	return l
-}
-
-// LeftAlignUniform left-align a series of tokens that compose a paragraph,
-// rendering multiple lines of uniform length maxLength.
-func (l *LineBreaker) LeftAlignUniform(tokens []string, maxLength float64) ([]string, error) {
-	l.nodes = l.leftAlignedNodes(tokens)
-	l.lineWidths = l.buildUniformLengths(maxLength)
-
-	breakList := l.breakPoints()
-	if breakList == nil {
-		return nil, ErrCannotBeSet
+	// add demerits due to fitness class whenever the fitness of 2 adjacent lines differ too much
+	if currentClass.isAwayFrom(fromBreakPoint.fitness) {
+		demerits += l.demerits.fitness
 	}
 
-	return l.render(breakList), nil
+	demerits += fromBreakPoint.totalDemerits
+
+	return demerits, currentClass
 }
 
-// buildUniformLengths fills 1 line of line length constraints,
-// making this constraint uniform across all lines.
-func (l *LineBreaker) buildUniformLengths(width float64) []float64 {
-	lengths := make([]float64, 1)
-	for i := range lengths {
-		lengths[i] = l.scale(width)
+// breakPoints yields an ordered linked-list breakpoints
+func (l *LineBreaker) breakPoints() *breakPoint {
+	// reset state
+	l.sum = new(sums)
+	l.activeNodes = list.New()
+	l.activeNodes.PushBack(newBreakPoint(0, 0, 0, 0, fitnessClassOne, sums{}, nil)) // first empty node starting a paragraph
+	startNode := l.findStartNode()                                                  // Baskerville version - should be 1 in normal cases
+
+	for i, node := range l.nodes[startNode:] {
+		index := startNode + i
+
+		switch {
+		case node.isBox():
+			l.sum.width += node.width // accumulate the total width of word
+		case node.isGlue():
+			if index > 0 && l.nodes[index-1].nodeType == nodeTypeBox {
+				l.mainLoop(index) // explore a glue following a word
+			}
+
+			l.sum.Add(node.sums)
+
+		case node.isPenalty() && node.penalty != infinity:
+			l.mainLoop(index) // explore a penalty
+		}
 	}
 
-	return lengths
+	if l.activeNodes.Len() > 0 {
+		nodeWithMinDemerits := l.findBestBreak()
+
+		return reverseBreakPoints(nodeWithMinDemerits)
+	}
+
+	if l.looseness == 0 {
+		return nil
+	}
+
+	// choose appropriate node
+	// TODO: implem looseness != 0 ("choose the appropriate active node")
+
+	return nil
 }
 
-// scale a text measure to convert the measurement unit to a value compatible
-// with the algorithm's parameters.
-func (l *LineBreaker) scale(in float64) float64 {
-	return math.Round(in * l.scaleFactor)
-}
+// findStartNode skips starting glues (i.e. indentations) or penalties.
+// TODO: remove?? (Baskerville version only)
+func (l *LineBreaker) findStartNode() (start int) {
+	for _, node := range l.nodes {
+		switch node.nodeType {
+		case nodeTypeBox:
+			return start
 
-func (l *LineBreaker) downScale(in float64) float64 {
-	// return int(math.Round(float64(in) * r / l.scaleFactor))
-	return math.Round(float64(in) / l.scaleFactor)
-}
-
-func skipNodes(start int, nodes []nodeT) int {
-	for j, node := range nodes[start:] {
-		// skip nodes after a line break
-		if node.isBox() || node.isForcedBreak() {
-			start += j
-
-			break
+		case nodeTypePenalty:
+			if node.penalty == -infinity {
+				return start
+			}
+		default:
+			start++
 		}
 	}
 
 	return start
 }
 
-// render the nodes with the provided line breaks .
-//
-// TODO: state handling for ANSI escape sequences (box attributes)
-// TODO: iterate breaks from list directly
-func (l *LineBreaker) render(breakList *breakPoint) []string {
-	var (
-		lines  []lineT
-		result []string
-	)
-
-	lineStart := 0
-	for brk := breakList.next; brk != nil; brk = brk.next {
-		lineStart = skipNodes(lineStart, l.nodes)
-
-		lines = append(lines, lineT{
-			ratio:    brk.ratio,
-			nodes:    l.nodes[lineStart : brk.position+1],
-			position: brk.position,
-		})
-
-		lineStart = brk.position
+func (l *LineBreaker) findBestBreak() *breakPoint {
+	nodeWithMinDemerits := &breakPoint{
+		totalDemerits: maxDemerit,
 	}
 
-	for _, line := range lines {
-		lineResult := new(strings.Builder)
+	for element := l.activeNodes.Front(); element != nil; element = element.Next() {
+		node := element.Value.(*breakPoint)
 
-		for index, node := range line.nodes {
-			switch {
-			case node.isBox():
-				// render a box node
-				lineResult.WriteString(node.value)
+		if node.totalDemerits < nodeWithMinDemerits.totalDemerits {
+			nodeWithMinDemerits = node
+		}
+	}
 
-			case node.isGlue():
-				// render a glue node
-				pad := node.width
-				if line.ratio < 0 {
-					pad += line.ratio * node.shrink
-				} else {
-					pad += line.ratio * node.stretch
+	return nodeWithMinDemerits
+}
+
+func (l *LineBreaker) sumFromNode(index int) sums {
+	sum := *l.sum
+
+	for i, node := range l.nodes[index:] {
+		if node.isGlue() {
+			sum.Add(node.sums)
+
+			continue
+		}
+
+		if node.isBox() || (node.isForcedBreak() && i > 0) {
+			break
+		}
+	}
+
+	return sum
+}
+
+// exploreForNode is referred to as "the main loop" in Knuth & Plass.
+func (l *LineBreaker) mainLoop(index int) {
+	node := l.nodes[index]
+	activeElement := l.activeNodes.Front()
+
+	var (
+		currentLine int // will range over lines starting from 1
+		candidates  map[fitnessClass]*breakPoint
+	)
+
+	lowestDemerits := maxDemerit
+	for activeElement != nil {
+		candidates = defaultCandidates() // set candidates with infinite demerits
+
+		// break points up to the current line
+		for activeElement != nil {
+			active := activeElement.Value.(*breakPoint)
+			next := activeElement.Next()
+			currentLine = active.line + 1
+			ratio := l.adjustmentRatio(active, node, l.sum, l.idealWidth(currentLine))
+
+			if ratio < -1 || node.isForcedBreak() {
+				// deactivate an undesirable break or a forced line break
+				l.activeNodes.Remove(activeElement)
+			}
+
+			if ratio >= -1 && ratio <= l.tolerance {
+				// update candidate
+				demerits, currentClass := l.demeritsAndClass(active, node, ratio)
+				lowestDemerits = minf(lowestDemerits, demerits)
+
+				if demerits < candidates[currentClass].totalDemerits {
+					candidates[currentClass] = active
 				}
+			}
 
-				lineResult.WriteString(strings.Repeat(space, int(l.downScale(pad))))
+			// ratio > l.tolerance is not considered feasible
 
-			case node.isPenalty():
-				if l.renderHyphens && node.penalty == l.hyphenPenalty && index == len(line.nodes)-1 {
-					// render a hyphen penalty node
-					lineResult.WriteString(hyphen)
-				}
+			activeElement = next
+
+			if activeElement != nil && active.line >= currentLine {
+				// stop iterating to add new candidates
+				break
 			}
 		}
 
-		result = append(result, lineResult.String())
-	}
-
-	return result
-}
-
-// boxNodes produces box nodes with possible word breaks (suited for left-aligned output).
-// TODO(fredbi): process punctuation marks, word breaking on natural separators (e.g. /|-_)
-func (l *LineBreaker) boxNodes(word string) []nodeT {
-	if !l.wordBreak || len(word) <= l.minHyphenate {
-		return []nodeT{newBox(l.scale(l.measurer(word)), word)}
-	}
-
-	hyphenated := l.hyphenator(word)
-	if len(hyphenated) == 0 { // this rule is based on the # runes, not the width
-		return []nodeT{newBox(l.scale(l.measurer(word)), word)}
-	}
-	// TODO: explicit hyphens or dashes
-
-	boxNodes := make([]nodeT, 0, len(hyphenated))
-
-	// word break points are associated with a penalty
-	for _, part := range hyphenated[:len(hyphenated)-1] {
-		boxNodes = append(boxNodes,
-			newBox(l.scale(l.measurer(part)), part),
-		)
-
-		if l.renderHyphens {
-			// when rendering hyphens, the penalty incurs some consumed width
-			boxNodes = append(boxNodes,
-				// justified:
-				//newPenalty(l.hyphenWidth, l.hyphenPenalty, flaggedPenalty),
-				// ragged right:
-				newPenalty(noWidth, infinity, unflaggedPenalty),
-				newGlue(noWidth, l.glueStretch, noShrink),
-				newPenalty(l.hyphenWidth, l.hyphenPenalty, flaggedPenalty),
-				newGlue(noWidth, -l.glueStretch, noShrink),
-			)
-		} else {
-			// when hyphens are not rendered (words are just broken), there is no width associated to the penalty
-			boxNodes = append(boxNodes,
-				newPenalty(noWidth, l.hyphenPenalty, flaggedPenalty),
-			)
+		if lowestDemerits < maxDemerit {
+			l.insertNewActiveBreak(activeElement, index, lowestDemerits, candidates)
 		}
 	}
-
-	lastPart := hyphenated[len(hyphenated)-1]
-	boxNodes = append(boxNodes,
-		newBox(l.scale(l.measurer(lastPart)), lastPart),
-	)
-
-	return boxNodes
 }
 
-// leftAlignedNodes prepares nodes for left-alignment.
-// TODO: punctuation marks
-func (l *LineBreaker) leftAlignedNodes(tokens []string) []nodeT {
-	nodes := make([]nodeT, 0, 4*(len(tokens)-1)+3)
+func (l *LineBreaker) insertNewActiveBreak(activeElement *list.Element, index int, lowestDemerits float64, candidates map[fitnessClass]*breakPoint) {
+	sum := l.sumFromNode(index)
 
-	// transform tokens into a list of nodes of type (box|glue|penalty)
-	for _, word := range tokens[:len(tokens)-1] {
-		nodes = append(nodes, l.boxNodes(word)...) // a word token, possibly broken in parts
-		// from K&P: justified:
-		// nodes = append(nodes, newGlue(l.spaceWidth, l.glueStretch, l.glueShrink))
-		// from K&P: ragged right:
-		nodes = append(nodes, newGlue(noWidth, l.glueStretch, noShrink))
-		nodes = append(nodes, newPenalty(noWidth, 0, unflaggedPenalty))
-		nodes = append(nodes, newGlue(l.spaceWidth, -l.glueStretch, noShrink))
+	for class, candidate := range candidates {
+		if candidate.totalDemerits >= maxDemerit || candidate.totalDemerits > lowestDemerits+l.demerits.fitness {
+			// skip default candidate
+			continue
+		}
+
+		newBreak := newBreakPoint(
+			index,                                    // break at node index
+			candidate.totalDemerits, candidate.ratio, // ratings for this break point
+			candidate.line+1,
+			class,
+			sum,       // totals after this node
+			candidate, // link to the previous candidate breakpoint
+		)
+
+		if activeElement != nil {
+			_ = l.activeNodes.InsertBefore(newBreak, activeElement)
+
+			return
+		}
+
+		_ = l.activeNodes.PushBack(newBreak)
+	}
+}
+
+// reverseBreakPoints walks backwards the list of breakpoints,
+// and prepares the ordered (forward) walking.
+func reverseBreakPoints(brk *breakPoint) *breakPoint {
+	var first *breakPoint
+	brk.next = nil
+
+	for brk != nil {
+		if brk.previous != nil {
+			brk.previous.next = brk
+			first = brk.previous
+		}
+
+		brk = brk.previous
 	}
 
-	// last token: complete the list of nodes with a final infinite glue and penalty.
-	nodes = append(nodes, l.boxNodes(tokens[len(tokens)-1])...)
-	nodes = append(nodes, newGlue(noWidth, infinity, noShrink))
-	nodes = append(nodes, newPenalty(noWidth, -infinity, flaggedPenalty))
-
-	return nodes
+	return first
 }
 
-// TODO: center(), justify()?
+// getIdealWidth retrieves the constraint on the line length.
+//
+// NOTE: currentLine starts at 1.
+func (l *LineBreaker) idealWidth(currentLine int) float64 {
+	if currentLine < len(l.lineWidths)+1 {
+		return l.lineWidths[currentLine-1]
+	}
+
+	return l.lineWidths[len(l.lineWidths)-1]
+}

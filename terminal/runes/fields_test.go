@@ -29,3 +29,13 @@ func TestFieldsFunc(t *testing.T) {
 		)
 	})
 }
+
+func toStrings(in [][]rune) []string {
+	out := make([]string, 0, len(in))
+
+	for _, s := range in {
+		out = append(out, string(s))
+	}
+
+	return out
+}
