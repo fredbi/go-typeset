@@ -371,3 +371,18 @@ func seqTestCases() []seqTestCase {
 		},
 	}
 }
+
+func TestStripToken(t *testing.T) {
+	const token = "Lorem ipsum dolor \x1b[31;1;4msit amet,"
+	stripped := StripToken([]rune(token))
+	require.Len(t, stripped, 2)
+	require.Equal(t, StrippedToken{
+		Text:      []rune("Lorem ipsum dolor "),
+		Remainder: []rune("\033[31;1;4msit amet,"),
+	}, stripped[0])
+	require.Equal(t, StrippedToken{
+		Text:          []rune("sit amet,"),
+		StartSequence: []rune("\033[31;1;4m"),
+		Remainder:     []rune{},
+	}, stripped[1])
+}

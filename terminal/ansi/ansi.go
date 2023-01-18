@@ -28,6 +28,23 @@ const (
 	stopSequence
 )
 
+// StripToken decodes a token into stripped tokens.
+func StripToken(token []rune) []StrippedToken {
+	attrs := make([]StrippedToken, 0, 4)
+
+	for {
+		stripped := StripANSIFromRunes(token)
+		attrs = append(attrs, stripped)
+		if len(stripped.Remainder) == 0 {
+			break
+		}
+
+		token = stripped.Remainder
+	}
+
+	return attrs
+}
+
 // StripANSIFromRunes strips a starting and a ending ANSI escape sequences from a token provided as a slice of runes.
 //
 // If the slice of runes contains several sequences, the remaining runes after the end of the first end sequence are returned.
@@ -35,7 +52,7 @@ const (
 // This means that you may need to call StripANSIFromRunes several times until no start sequence is found to ensure that the stripped
 // result no longer contains any sequence.
 //
-// Specifically, ANSI sequences detected as start/stop are SGR codes ("Select Grapihc Rendition"):
+// Specifically, ANSI sequences detected as start/stop are SGR codes ("Select Graphic Rendition"):
 //
 //	ESC[{parameters}m
 //
@@ -174,9 +191,6 @@ func StripANSIFromRunes(rns []rune) StrippedToken {
 // decodeANSISequence identifies an ANSI terminal escape sequence.
 //
 // The escape sequence detected follows a Control Sequence Introducer: ESC[.
-//
-// NOTE: this implementation supersedes the previous regexp-based one and performs about 10x faster,
-// with no allocation and minimal processing. Further, we may now recognize more complex patterns for escape sequences,
 func decodeANSISequence(rdr *runesio.SliceReader) ([]rune, kind) {
 	const maxDigits = 3
 
