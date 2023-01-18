@@ -213,26 +213,7 @@ func (f fitnessClass) isAwayFrom(g fitnessClass) bool {
 	return abs(int(f)-int(g)) > 1
 }
 
-func (s *tokenState) SetStart() {
-	if s.isStarted {
-		return
-	}
-}
-
-func (s *tokenState) SetStop() {
-	if s.isStopped {
-		return
-	}
-}
-
 func (s *tokenState) Start(text []rune) {
-	// todo: embed chained line, store current renderer and work the push together
-	/*
-		if len(s.stripped.StartSequence) == 0 && len(s.stripped.StopSequence) == 0 {
-			return nil
-		}
-	*/
-
 	if !s.isStarted {
 		s.isStarted = true
 
