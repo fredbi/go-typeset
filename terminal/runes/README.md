@@ -13,5 +13,5 @@ A built-in table of special rune properties is generated from the properties pub
 To update mappings to newer unicode releases, please update the `build_tables.go` source and re-generate the tables with:
 
 ```
-go generate .
+go generate ./...
 ```
