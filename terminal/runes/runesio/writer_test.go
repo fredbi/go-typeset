@@ -10,7 +10,7 @@ import (
 func TestRunesWriter(t *testing.T) {
 	w := new(bytes.Buffer)
 
-	writer := AsRunesWriter(w)
+	writer := NewWriter(w)
 
 	t.Run("should write a single rune", func(t *testing.T) {
 		res, err := writer.WriteRune('a')
