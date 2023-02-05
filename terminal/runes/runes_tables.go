@@ -2,6 +2,9 @@
 
 package runes
 
+// unicode EastAsianWidth properties retrieved from https://unicode.org/Public/15.0.0/ucd/EastAsianWidth.txt
+// unicode emoji properties retrieved from https://unicode.org/Public/15.0.0/ucd/emoji/emoji-data.txt
+
 var combining = table{
 	{0x0300, 0x036F}, {0x0483, 0x0489}, {0x07EB, 0x07F3},
 	{0x0C00, 0x0C00}, {0x0C04, 0x0C04}, {0x0CF3, 0x0CF3},

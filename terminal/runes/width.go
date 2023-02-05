@@ -11,7 +11,7 @@ import (
 // NOTE: this version does not support graphemes on multiple code points.
 //
 // References:
-//   - East-Asian characters are displayed as: http://www.unicode.org/reports/tr11
+//   - East-Asian characters are displayed as: https://www.unicode.org/reports/tr11
 //   - Emojis are displayed as: https://www.unicode.org/reports/tr51
 func Width(r rune, opts ...Option) int {
 	if !utf8.ValidRune(r) || r == utf8.RuneError {
@@ -27,7 +27,7 @@ func Width(r rune, opts ...Option) int {
 		return runeWidth(r, o)
 	}
 
-	buildLookupOnce.Do(initLookupTable)
+	buildLookupOnce.Do(initLookupTable) // builds the cache once
 
 	return int(
 		(lookupTable[r>>2] >> ((r % 4) * 2)) & 3,
@@ -40,8 +40,17 @@ func Width(r rune, opts ...Option) int {
 func Widths(runes []rune, opts ...Option) (width int) {
 	o := optionsWithDefaults(opts)
 
+	if o.EastAsian {
+		for _, r := range runes {
+			width += runeWidth(r, o)
+		}
+
+		return width
+	}
+
+	buildLookupOnce.Do(initLookupTable) // builds the cache once
 	for _, r := range runes {
-		width += runeWidth(r, o)
+		width += int((lookupTable[r>>2] >> ((r % 4) * 2)) & 3)
 	}
 
 	return width
@@ -50,6 +59,15 @@ func Widths(runes []rune, opts ...Option) (width int) {
 // StringWidth return the width of a string, as displayed in fixed-width font.
 func StringWidth(s string, opts ...Option) (width int) {
 	return Widths([]rune(s), opts...)
+}
+
+// IsAmbiguous returns true if the unicode point for this rune
+// is considered ambiguous regarding width in East Asian character sets.
+//
+// Ambiguous runes refer to unicode points that are presents in different sets,
+// and more context might be needed to determine the desired width.
+func IsAmbiguous(r rune) bool {
+	return inTable(r, ambiguous)
 }
 
 func runeWidth(r rune, opts *options) int {

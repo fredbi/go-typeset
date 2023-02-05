@@ -76,7 +76,7 @@ func TestWidth(t *testing.T) {
 			for _, toPin := range runewidthtests {
 				testCase := toPin
 
-				w := Width(testCase.in, WithEastAsianWidth(true))
+				w := Width(testCase.in, WithEastAsian(true))
 				require.Equal(t, runeWidth(testCase.in, &options{EastAsian: true, DefaultAsianAmbiguousWidth: 2}), w)
 				require.Equalf(t, testCase.eaout, w,
 					"%[1]U: RuneWidth(%[1]q) = %d, want %d (EastAsianWidth=true, SkipStrictEmojiNeutral=false)",
@@ -92,7 +92,7 @@ func TestWidth(t *testing.T) {
 		t.Run("should resolve rune widths", func(t *testing.T) {
 			for _, toPin := range runewidthtests {
 				testCase := toPin
-				w := Width(testCase.in, WithEastAsianWidth(true), WithSkipStrictEmojiNeutral(true))
+				w := Width(testCase.in, WithEastAsian(true), WithSkipStrictEmojiNeutral(true))
 				require.Equal(t, runeWidth(testCase.in, &options{EastAsian: true, SkipStrictEmojiNeutral: true, DefaultAsianAmbiguousWidth: 2}), w)
 				require.Equalf(t, testCase.nseout, w,
 					"%[1]U: RuneWidth(%[1]q) = %d, want %d (EastAsianWidth=true, SkipStrictEmojiNeutral=true)",
@@ -118,7 +118,7 @@ func TestWidth(t *testing.T) {
 	})
 
 	t.Run("should be able to customize default width for ambiguous code points", func(t *testing.T) {
-		require.Equal(t, 2, Width('Å', WithEastAsianWidth(true), WithAsianAmbiguousWidth(2)))
-		require.Equal(t, 1, Width('Å', WithEastAsianWidth(true), WithAsianAmbiguousWidth(1)))
+		require.Equal(t, 2, Width('Å', WithEastAsian(true), WithEastAsianAmbiguousWidth(2)))
+		require.Equal(t, 1, Width('Å', WithEastAsian(true), WithEastAsianAmbiguousWidth(1)))
 	})
 }
