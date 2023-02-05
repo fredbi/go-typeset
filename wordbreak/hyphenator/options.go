@@ -19,7 +19,9 @@ type (
 // WithanguageTag specifies the language of the hyphenator, using
 // a language tag from the standard library.
 //
-// The default language is "en-US".
+// The default language is "language.AmericanEnglish".
+//
+// Unsupported languages are matched to sensible defaults, using a language.Matcher.
 func WithLanguageTag(tag language.Tag) Option {
 	return func(o *options) {
 		o.lang = tag
@@ -30,6 +32,8 @@ func WithLanguageTag(tag language.Tag) Option {
 // a language string like "en-US", "en-GB", "es".
 //
 // The default language is "en-US".
+//
+// Unsupported languages are matched to sensible defaults, using a language.Matcher.
 func WithLanguage(lang string) Option {
 	tag, _ := language.MatchStrings(langMatcher, lang)
 
@@ -38,18 +42,27 @@ func WithLanguage(lang string) Option {
 	}
 }
 
+// WithMinLength configures the minimum length (in runes) of a word to be eligible to hyphenation.
+//
+// The default is 4.
 func WithMinLength(minLength int) Option {
 	return func(o *options) {
 		o.minLength = minLength
 	}
 }
 
+// WithMinLeft configures the minimum length of a word part before an hyphenation point.
+//
+// The default is 2, meaning that the hyphenator will never break words leaving a single rune to the left.
 func WithMinLeft(minLeft int) Option {
 	return func(o *options) {
 		o.minLeft = minLeft
 	}
 }
 
+// WithMinRight configures the minimum length of a word part after an hyphenation point.
+//
+// The default is 2, meaning that the hyphenator will never break words leaving a single rune to the right.
 func WithMinRight(minRight int) Option {
 	return func(o *options) {
 		o.minRight = minRight

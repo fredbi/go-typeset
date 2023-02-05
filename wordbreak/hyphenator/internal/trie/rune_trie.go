@@ -1,20 +1,21 @@
 package trie
 
-// RuneTrie is a trie of runes with string keys and interface{} values.
-// Note that internal nodes have nil values so a stored nil value will not
-// be distinguishable.
+// RuneTrie is a trie of runes with []rune keys and interface{} values.
+//
+// Internal nodes have nil values: a stored nil value will thus not be distinguishable.
 type RuneTrie struct {
 	value    interface{}
 	children map[rune]*RuneTrie
 }
 
-// NewRuneTrie allocates and returns a new *RuneTrie.
+// NewRuneTrie allocates and returns a new RuneTrie.
 func NewRuneTrie() *RuneTrie {
 	return new(RuneTrie)
 }
 
-// Get returns the value stored at the given key. Returns nil for internal
-// nodes or for nodes with a value of nil.
+// Get returns the value stored at the given key.
+//
+// Returns nil for internal nodes or for nodes with a value of nil.
 func (trie *RuneTrie) Get(key []rune) interface{} {
 	node := trie
 	for _, r := range key {
@@ -28,10 +29,9 @@ func (trie *RuneTrie) Get(key []rune) interface{} {
 }
 
 // Put inserts the value into the trie at the given key, replacing any
-// existing items. It returns true if the put adds a new value, false
-// if it replaces an existing value.
-// Note that internal nodes have nil values so a stored nil value will not
-// be distinguishable.
+// existing items.
+//
+// It returns true if the put adds a new value, and false if it replaces an existing value.
 func (trie *RuneTrie) Put(key []rune, value interface{}) bool {
 	node := trie
 	for _, r := range key {
@@ -52,9 +52,10 @@ func (trie *RuneTrie) Put(key []rune, value interface{}) bool {
 	return isNewVal
 }
 
-// Delete removes the value associated with the given key. Returns true if a
-// node was found for the given key. If the node or any of its ancestors
-// becomes childless as a result, it is removed from the trie.
+// Delete removes the value associated with the given key.
+//
+// Returns true if a node was found for the given key.
+// If the node or any of its ancestors becomes childless as a result, it is removed from the trie.
 func (trie *RuneTrie) Delete(key []rune) bool {
 	path := make([]nodeRune, len(key)) // record ancestors to check later
 	node := trie
@@ -91,7 +92,7 @@ func (trie *RuneTrie) Delete(key []rune) bool {
 	return true // node (internal or not) existed and its value was nil'd
 }
 
-// RuneTrie node and the rune key of the child the path descends into.
+// A node of the RuneTrie with its the rune key and child to descend into.
 type nodeRune struct {
 	node *RuneTrie
 	r    rune

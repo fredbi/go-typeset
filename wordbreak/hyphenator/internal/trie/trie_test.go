@@ -4,8 +4,6 @@ import (
 	"testing"
 )
 
-// RuneTrie
-
 func TestRuneTrie(t *testing.T) {
 	trie := NewRuneTrie()
 	testTrie(t, trie)
