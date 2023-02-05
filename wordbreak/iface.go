@@ -6,6 +6,6 @@ type (
 		BreakWord([]rune) [][]rune
 	}
 
-	// SplitFunc splits a word into parts
+	// SplitFunc splits a word into parts.
 	SplitFunc func([]rune) [][]rune
 )
